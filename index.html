@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="fi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hullujussi - Taistelu Juuan kylällä</title>
+    <style>
+        body {
+            background-color: #1a1a1a;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        canvas {
+            background-color: #87CEEB; /* Taivaansininen */
+            box-shadow: 0 0 20px rgba(0,0,0,0.8);
+            border: 4px solid #333;
+            border-radius: 5px;
+        }
+        h1 { margin-bottom: 5px; color: #ffeb3b; text-shadow: 2px 2px #000; }
+        p { margin-top: 10px; font-size: 16px; color: #ccc; }
+        .controls { background: #333; padding: 10px 20px; border-radius: 5px; margin-top: 10px; }
+    </style>
+</head>
+<body>
+    <h1>Hullujussi: Taistelu Juuan kylällä 🚜</h1>
+    <canvas id="gameCanvas" width="800" height="400"></canvas>
+    <div class="controls">
+        <strong>Ohjeet:</strong> Liiku: ⬅️ Vasen / Oikea ➡️ | Lyö: <b>VÄLILYÖNTI</b>
+    </div>
+
+    <script>
+        const canvas = document.getElementById("gameCanvas");
+        const ctx = canvas.getContext("2d");
+
+        // Pelin muuttujat
+        let score = 0;
+        let health = 5;
+        let gameOver = false;
+
+        // Pelaaja (Hullujussi)
+        const player = {
+            x: 400,
+            y: 250,
+            w: 50,
+            h: 90,
+            speed: 6,
+            color: '#2980b9',
+            facingRight: true,
+            isAttacking: false,
+            attackTimer: 0
+        };
+
+        // Viholliset
+        let enemies = [];
+        let spawnTimer = 0;
+        let spawnRate = 90; // Kuinka usein vihuja tulee (pienempi = nopeammin)
+
+        // Näppäimet
+        const keys = {
+            ArrowLeft: false,
+            ArrowRight: false,
+            Space: false
+        };
+
+        document.addEventListener("keydown", (e) => {
+            if (e.code === "ArrowLeft") keys.ArrowLeft = true;
+            if (e.code === "ArrowRight") keys.ArrowRight = true;
+            if (e.code === "Space") {
+                // Estä sivun vieritys välilyönnillä
+                e.preventDefault();
+                if (!player.isAttacking && !gameOver) {
+                    player.isAttacking = true;
+                    player.attackTimer = 15; // Hyökkäyksen kesto frameina
+                    checkHits();
+                }
+                // Käynnistä peli uudelleen jos kuollut
+                if (gameOver) resetGame();
+            }
+        });
+
+        document.addEventListener("keyup", (e) => {
+            if (e.code === "ArrowLeft") keys.ArrowLeft = false;
+            if (e.code === "ArrowRight") keys.ArrowRight = false;
+        });
+
+        function resetGame() {
+            score = 0;
+            health = 5;
+            enemies = [];
+            player.x = 400;
+            spawnRate = 90;
+            gameOver = false;
+            gameLoop();
+        }
+
+        function checkHits() {
+            // Määritä lyönnin osuma-alue (hitbox)
+            const attackRange = 60;
+            const attackW = 40;
+            const attackX = player.facingRight ? player.x + player.w : player.x - attackW;
+            const attackY = player.y + 20;
+
+            // Tarkista osuuko mihinkään viholliseen
+            for (let i = enemies.length - 1; i >= 0; i--) {
+                let e = enemies[i];
+                // Yksinkertainen laatikoiden törmäystarkistus
+                if (attackX < e.x + e.w &&
+                    attackX + attackW > e.x &&
+                    attackY < e.y + e.h &&
+                    attackY + 40 > e.y) {
+                    
+                    // Osuma! Poista vihollinen ja anna piste
+                    enemies.splice(i, 1);
+                    score += 10;
+                    
+                    // Nopeutetaan peliä hieman kun pisteet nousevat
+                    if (score % 50 === 0 && spawnRate > 30) spawnRate -= 5;
+                }
+            }
+        }
+
+        function update() {
+            if (gameOver) return;
+
+            // Liikkuminen
+            if (keys.ArrowLeft && player.x > 0) {
+                player.x -= player.speed;
+                player.facingRight = false;
+            }
+            if (keys.ArrowRight && player.x < canvas.width - player.w) {
+                player.x += player.speed;
+                player.facingRight = true;
+            }
+
+            // Hyökkäyksen ajastin
+            if (player.isAttacking) {
+                player.attackTimer--;
+                if (player.attackTimer <= 0) {
+                    player.isAttacking = false;
+                }
+            }
+
+            // Vihollisten syntyminen
+            spawnTimer++;
+            if (spawnTimer >= spawnRate) {
+                spawnTimer = 0;
+                // Arvo tuleeko vasemmalta vai oikealta
+                const comesFromLeft = Math.random() < 0.5;
+                enemies.push({
+                    x: comesFromLeft ? -50 : canvas.width + 50,
+                    y: 260,
+                    w: 40,
+                    h: 80,
+                    speed: 2 + Math.random() * 2, // Satunnainen nopeus 2-4
+                    direction: comesFromLeft ? 1 : -1,
+                    color: '#c0392b'
+                });
+            }
+
+            // Vihollisten liikuttaminen ja pelaajaan osuminen
+            for (let i = enemies.length - 1; i >= 0; i--) {
+                let e = enemies[i];
+                e.x += e.speed * e.direction;
+
+                // Osuuko vihollinen pelaajaan?
+                if (e.x < player.x + player.w &&
+                    e.x + e.w > player.x &&
+                    e.y < player.y + player.h &&
+                    e.y + e.h > player.y) {
+                    
+                    health--;
+                    enemies.splice(i, 1); // Vihollinen katoaa osuessa
+                    
+                    if (health <= 0) {
+                        gameOver = true;
+                    }
+                }
+            }
+        }
+
+        function draw() {
+            // Taivas piirtyy automaattisesti canvasin background-colorista, 
+            // mutta tyhjennetään ruutu silti
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Piirrä Juuan kylän tausta
+            // 1. Aurinko
+            ctx.fillStyle = "#f1c40f";
+            ctx.beginPath();
+            ctx.arc(100, 80, 40, 0, Math.PI * 2);
+            ctx.fill();
+
+            // 2. Kaukaiset vaarat/metsät
+            ctx.fillStyle = "#27ae60";
+            ctx.beginPath();
+            ctx.moveTo(0, 250);
+            ctx.lineTo(200, 150);
+            ctx.lineTo(400, 250);
+            ctx.lineTo(600, 180);
+            ctx.lineTo(800, 250);
+            ctx.lineTo(800, 400);
+            ctx.lineTo(0, 400);
+            ctx.fill();
+
+            // 3. Tie (Juuan raitti)
+            ctx.fillStyle = "#7f8c8d";
+            ctx.fillRect(0, 320, canvas.width, 80);
+
+            // 4. Kyltti
+            ctx.fillStyle = "#8d6e63";
+            ctx.fillRect(650, 250, 10, 70); // tolppa
+            ctx.fillStyle = "#fff";
+            ctx.fillRect(620, 230, 80, 30); // taulu
+            ctx.fillStyle = "#000";
+            ctx.font = "14px Arial";
+            ctx.fillText("JUUKA", 635, 250);
+
+            // Piirrä Hullujussi
+            ctx.fillStyle = player.color;
+            ctx.fillRect(player.x, player.y, player.w, player.h);
+            
+            // Jussin silmät ja paita (että tiedetään suunta)
+            ctx.fillStyle = "#fff";
+            if (player.facingRight) {
+                ctx.fillRect(player.x + 30, player.y + 10, 10, 10); // silmä
+                ctx.fillStyle = "#f39c12"; // Keltamusta raksapaita-look
+                ctx.fillRect(player.x + 35, player.y + 30, 15, 30);
+            } else {
+                ctx.fillRect(player.x + 10, player.y + 10, 10, 10);
+                ctx.fillStyle = "#f39c12";
+                ctx.fillRect(player.x, player.y + 30, 15, 30);
+            }
+
+            // Piirrä lyönti (Mättö!)
+            if (player.isAttacking) {
+                ctx.fillStyle = "rgba(255, 255, 0, 0.8)";
+                const attackW = 40;
+                const attackX = player.facingRight ? player.x + player.w : player.x - attackW;
+                ctx.fillRect(attackX, player.y + 20, attackW, 40);
+                
+                // Mättö-teksti
+                ctx.fillStyle = "#e74c3c";
+                ctx.font = "bold 20px Arial";
+                ctx.fillText("MÄTTÖ!", attackX - 10, player.y + 10);
+            }
+
+            // Piirrä viholliset
+            enemies.forEach(e => {
+                ctx.fillStyle = e.color;
+                ctx.fillRect(e.x, e.y, e.w, e.h);
+                // Vihun vihaiset silmät
+                ctx.fillStyle = "#000";
+                if (e.direction === 1) { // kulkee oikealle
+                    ctx.fillRect(e.x + 25, e.y + 10, 5, 5);
+                } else { // kulkee vasemmalle
+                    ctx.fillRect(e.x + 10, e.y + 10, 5, 5);
+                }
+            });
+
+            // Käyttöliittymä (Pisteet ja Elämät)
+            ctx.fillStyle = "white";
+            ctx.font = "bold 24px Arial";
+            ctx.shadowColor = "black";
+            ctx.shadowBlur = 4;
+            ctx.fillText(`Pisteet: ${score}`, 20, 40);
+            ctx.fillText(`Elämät: ${"❤️".repeat(health)}`, 20, 75);
+            ctx.shadowBlur = 0; // Poistetaan varjo muilta piirroksilta
+
+            // Game Over ruutu
+            if (gameOver) {
+                ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                
+                ctx.fillStyle = "#e74c3c";
+                ctx.font = "bold 48px Arial";
+                ctx.textAlign = "center";
+                ctx.fillText("VOIVOI, JUSSI KAASTU!", canvas.width / 2, canvas.height / 2 - 20);
+                
+                ctx.fillStyle = "white";
+                ctx.font = "24px Arial";
+                ctx.fillText(`Lopulliset pisteet: ${score}`, canvas.width / 2, canvas.height / 2 + 30);
+                ctx.fillText("Paina VÄLILYÖNTIÄ yrittääksesi uudelleen", canvas.width / 2, canvas.height / 2 + 70);
+                ctx.textAlign = "left"; // Palautus
+            }
+        }
+
+        function gameLoop() {
+            update();
+            draw();
+            if (!gameOver) {
+                requestAnimationFrame(gameLoop);
+            }
+        }
+
+        // Käynnistä peli
+        gameLoop();
+    </script>
+</body>
+</html>
